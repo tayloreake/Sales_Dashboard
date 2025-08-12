@@ -28,10 +28,9 @@ def authenticate_user(email, password):
 
     # Load and parse the JSON string
     creds_data = st.secrets["google_sheets_credentials"]
-    credentials_dict = json.loads(creds_data)
-
-    # Authenticate
+    credentials_dict = dict(st.secrets["google_sheets_credentials"])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
+
     client = gspread.authorize(creds)
 
     # Read spreadsheet
