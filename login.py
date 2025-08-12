@@ -27,9 +27,9 @@ def authenticate_user(email, password):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
     # Load and parse the JSON string
-    creds_data = st.secrets["google_sheets_credentials"]
-    credentials_dict = dict(st.secrets["google_sheets_credentials"])
+    credentials_dict = st.secrets["google_sheets_credentials"]  # already a dict
     creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
+
 
     client = gspread.authorize(creds)
 
