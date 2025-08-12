@@ -24,7 +24,11 @@ def login():
 def authenticate_user(email, password):
     # Google Sheets connection
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("Credential.json", scope)
+    # Load JSON credentials from environment
+    credentials_dict = json.loads(os.environ["google_sheets_credentials"])
+
+    # Authenticate with gspread directly from the dict
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
     client = gspread.authorize(creds)
 
     # Load raw values (skips header processing)

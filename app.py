@@ -1,5 +1,6 @@
 ﻿import streamlit as st
 import pandas as pd
+import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import plotly.express as px
@@ -33,7 +34,12 @@ def load_data():
     """Fetch data from Google Sheets once and cache it."""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("Credential.json", scope)
+        
+        # Load JSON credentials from environment
+        credentials_dict = json.loads(os.environ["google_sheets_credentials"])
+
+        # Authenticate with gspread directly from the dict
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
         client = gspread.authorize(creds)
         sheet = client.open("Copy of Job & Reciept Full Data").worksheet("Combined Data")
         data = sheet.get_all_values()
