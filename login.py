@@ -2,7 +2,7 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
-import json
+import json # Import the json module
 import os
 
 def login():
@@ -26,17 +26,17 @@ def login():
 def authenticate_user(email, password):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-    # Load and parse the JSON string
-    credentials_dict = st.secrets["google_sheets_credentials"]  # already a dict
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
+    # Load the JSON string from st.secrets and parse it into a dictionary
+    credentials_json_string = st.secrets["google_sheets_credentials"]
+    creds_dict = json.loads(credentials_json_string) # NEW: Parse the JSON string into a dict
 
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope) # Use the parsed dict
 
     client = gspread.authorize(creds)
 
     # Read spreadsheet
     sheet = client.open("Copy of Job & Reciept Full Data").worksheet("Target")
     data = sheet.get_all_values()
-
 
     df = pd.DataFrame(data[1:], columns=data[0])
     df["EMAIL"] = df.iloc[:, 10].astype(str).str.strip().str.lower()

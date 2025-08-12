@@ -36,11 +36,13 @@ def load_data():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
-        # Load JSON credentials from environment
-        credentials_dict = st.secrets["google_sheets_credentials"] 
+        # Load JSON credentials from environment (it's a string from secrets.toml)
+        credentials_json_string = st.secrets["google_sheets_credentials"] 
+        
+        # Parse the JSON string into a Python dictionary
+        credentials_dict = json.loads(credentials_json_string) # FIX IS HERE!
 
         creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
-
 
         client = gspread.authorize(creds)
         sheet = client.open("Copy of Job & Reciept Full Data").worksheet("Combined Data")
@@ -71,7 +73,6 @@ def load_data():
     except Exception as e:
         st.error(f"Failed to load data from Google Sheets: {e}")
         return pd.DataFrame()
-
 st.title(f"📊 Job Dashboard")
 st.write(f"Welcome, {username}")
 
