@@ -37,10 +37,11 @@ def load_data():
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
         # Load JSON credentials from environment
-        credentials_dict = json.loads(st.secrets["google_sheets_credentials"])
+        credentials_dict = st.secrets["google_sheets_credentials"] 
 
-        # Authenticate with gspread directly from the dict
         creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
+
+
         client = gspread.authorize(creds)
         sheet = client.open("Copy of Job & Reciept Full Data").worksheet("Combined Data")
         data = sheet.get_all_values()
