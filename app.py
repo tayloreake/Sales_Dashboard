@@ -395,7 +395,7 @@ with profitability_cols[0]:
         x=alt.X('Job Type:N', title="Job Type"),
         y=alt.Y('count():Q', title="Number of Jobs"),
         color=alt.Color('Profitability:N', title="Profitability", scale=color_scale), 
-        order=alt.Order('profitability_order:Q', sort='ascending'), # Use the new numerical order column
+        order=alt.Order('profitability_order:Q', sort='descending'), # Use the new numerical order column
         tooltip=['Job Type', 'Profitability', 'count()']
     ).properties(title="Jobs by Profitability")
     
@@ -408,7 +408,7 @@ with profitability_cols[0]:
         color=alt.value('black'),
         x=alt.X('Job Type:N'),
         y=alt.Y('count():Q', stack=True), # Apply stack=True for y-encoding of text
-        order=alt.Order('profitability_order:Q', sort='ascending') # Use the new numerical order column
+        order=alt.Order('profitability_order:Q', sort='descending') # Use the new numerical order column
     )
     
     st.altair_chart(threshold_chart_bars + threshold_chart_text, use_container_width=True)
