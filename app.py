@@ -187,13 +187,7 @@ if monthly_gross_profit > 1000000:
 elif monthly_gross_profit > 800000:
     commission = monthly_gross_profit * 0.035 # 3.5%
 
-# Calculate Gross Profit %
-total_gross_sales = df_filtered["Gross Sales"].sum()
-gross_profit_pct_calculated = 0
 
-# Avoid division by zero
-if total_gross_sales > 0:
-    gross_profit_pct_calculated = (monthly_gross_profit / total_gross_sales) * 100
 
 # --- SCORECARDS (KPIs) ---
 if "JOB STATUS" in df_filtered.columns:
@@ -207,6 +201,8 @@ else:
     st.warning("🚨 'JOB STATUS' column not found in data.")
     closed_count, open_count = 0, 0
 
+
+
 total_jobs = len(df_filtered)
 total_sales = closed_jobs["Total Sales"].sum()
 gross_profit = closed_jobs["Gross Profit"].sum()
@@ -214,6 +210,7 @@ vat = closed_jobs["VAT"].sum()
 gross_sales = closed_jobs["Gross Sales"].sum()
 fcl_expense = closed_jobs["FCL Expense"].sum()
 avg_profit_pct = closed_jobs["% GROSS PROFIT"].mean()
+gross_profit_per = closed_jobs["Gross Profit"].sum() / closed_jobs["Gross Sales"].sum() * 100 
 
 # KPIs - will wrap to multiple rows if screen size is small
 kpi_values = [
@@ -226,7 +223,7 @@ kpi_values = [
     ("Completed Jobs", closed_count),
     ("Incomplete Jobs", open_count),
     ("💰 Commission", f"KES {commission:,.0f}"),
-    ("📉 Gross Profit %", f"{gross_profit_pct_calculated:.2f}%")
+    ("📉 Gross Profit %", f"{gross_profit_per:.2f}%")
 ]
 
 # Create flexible layout that wraps on small screens
