@@ -422,7 +422,7 @@ with profitability_cols[1]:
         color=alt.Color('Profitability:N',
                         title="Profitability", 
                         scale=color_scale), # Color encoding handles sort
-        order=alt.Order('profitability_order:Q', sort='ascending'), # Use the new numerical order column
+        order=alt.Order('profitability_order:Q', sort='descending'), # Use the new numerical order column
         tooltip=['Job Type', 'Profitability', 'sum(Total Sales)']
     ).properties(title="Total Sales by Profitability")
     
@@ -435,7 +435,7 @@ with profitability_cols[1]:
         color=alt.value('black'),
         x=alt.X('Job Type:N'),
         y=alt.Y('Total Sales:Q', aggregate='sum', stack=True), # Apply stack=True for y-encoding of text
-        order=alt.Order('profitability_order:Q', sort='ascending') # Use the new numerical order column
+        order=alt.Order('profitability_order:Q', sort='descending') # Use the new numerical order column
     )
     st.altair_chart(sales_chart_bars + sales_chart_text, use_container_width=True)
 
