@@ -3,6 +3,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import json # Import the json module
+import toml
 import os
 
 def login():
@@ -25,16 +26,13 @@ def login():
 
 def authenticate_user(email, password):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-
-    # Load the JSON string from st.secrets and parse it into a dictionary
-    credentials_json_string = st.secrets["google_sheets_credentials"]
-    creds_dict = json.loads(credentials_json_string) # NEW: Parse the JSON string into a dict
-
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope) # Use the parsed dict
+    
+    #onfig = toml.load("secrects.toml")
+    creds_dict = st.secrets["google_sheets_credentials"]  # Already a dict
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 
     client = gspread.authorize(creds)
 
-    # Read spreadsheet
     sheet = client.open("Copy of Job & Reciept Full Data").worksheet("Target")
     data = sheet.get_all_values()
 
@@ -46,3 +44,4 @@ def authenticate_user(email, password):
         (df["EMAIL"] == email.strip().lower()) &
         (df["PASSWORD"] == password.strip())
     )
+

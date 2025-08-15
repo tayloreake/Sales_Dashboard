@@ -2,6 +2,7 @@
 import pandas as pd
 import os
 import json
+import toml
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import plotly.express as px
@@ -36,13 +37,12 @@ def load_data():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
-        # Load JSON credentials from environment (it's a string from secrets.toml)
-        credentials_json_string = st.secrets["google_sheets_credentials"] 
+        # Load JSON credentials from secrets
+        creds_dict = st.secrets["google_sheets_credentials"]
         
-        # Parse the JSON string into a Python dictionary
-        credentials_dict = json.loads(credentials_json_string) # FIX IS HERE!
-
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
+        # The creds_dict is already a dictionary-like object,
+        # so pass it directly to the credential creation function.
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 
         client = gspread.authorize(creds)
         sheet = client.open("Copy of Job & Reciept Full Data").worksheet("Combined Data")
@@ -73,6 +73,7 @@ def load_data():
     except Exception as e:
         st.error(f"Failed to load data from Google Sheets: {e}")
         return pd.DataFrame()
+
 st.title(f"📊 Job Dashboard")
 st.write(f"Welcome, {username}")
 
@@ -85,7 +86,8 @@ if df_full.empty:
     st.stop()
 
 # --- 1. Rename columns for consistency and easier use ---
-
+# Assuming column renaming is handled implicitly or not strictly required for this fix.
+# If you had explicit renames, they would go here.
 
 # --- 2. Clean and convert data types on the renamed columns ---
 df_full["Email"] = df_full["Email"].astype(str).str.strip().str.lower()
@@ -115,7 +117,6 @@ df_full["Profitability"] = df_full["THRESHOLD PROFITABILITY"].fillna("Unknown").
 # --- 3. Apply the initial user filter ---
 df_user = df_full[df_full["Email"] == username].copy()
 
-# ... rest of your code ...
 if df_user.empty:
     st.info("No data found for the current user.")
     st.stop()
@@ -156,7 +157,6 @@ df_filtered = df_user[
 if df_filtered.empty:
     st.warning("No data matches the selected filters.")
     st.stop()
-
 
 
 st.markdown("""
@@ -208,11 +208,11 @@ else:
     closed_count, open_count = 0, 0
 
 total_jobs = len(df_filtered)
-total_sales = df_filtered["Total Sales"].sum()
-gross_profit = df_filtered["Gross Profit"].sum()
-vat = df_filtered["VAT"].sum()
-gross_sales = df_filtered["Gross Sales"].sum()
-fcl_expense = df_filtered["FCL Expense"].sum()
+total_sales = closed_jobs["Total Sales"].sum()
+gross_profit = closed_jobs["Gross Profit"].sum()
+vat = closed_jobs["VAT"].sum()
+gross_sales = closed_jobs["Gross Sales"].sum()
+fcl_expense = closed_jobs["FCL Expense"].sum()
 #avg_profit_pct = df_filtered["% GROSS PROFIT"].mean()
 
 # KPIs - will wrap to multiple rows if screen size is small
@@ -233,7 +233,6 @@ kpi_values = [
 cols = st.columns(3)  # Start with 3 per row (adjustable)
 for i, (label, value) in enumerate(kpi_values):
     cols[i % 3].metric(label, value)
-
 
 
 # Add Altair charts in a new row
@@ -320,7 +319,13 @@ df_mos = df_filtered.groupby("Job Type")[mos_categories + ["TOTAL MOS COSTS"]].s
 
 # Calculate percentages
 for col in mos_categories:
-    df_mos[f"{col} %"] = (df_mos[col] / df_mos["TOTAL MOS COSTS"]) * 100
+    # Ensure TOTAL MOS COSTS is not zero to avoid division by zero
+    # Replace division by zero results with 0 or NaN, then handle with dropna
+    df_mos[f"{col} %"] = df_mos.apply(
+        lambda row: (row[col] / row["TOTAL MOS COSTS"]) * 100 if row["TOTAL MOS COSTS"] != 0 else 0,
+        axis=1
+    )
+
 
 # Melt for easier plotting in Altair
 df_mos_melt = df_mos.melt(id_vars="Job Type", 
@@ -331,89 +336,116 @@ df_mos_melt = df_mos.melt(id_vars="Job Type",
 # Clean category names
 df_mos_melt["Category"] = df_mos_melt["Category"].str.replace(" %", "", regex=False)
 
-# --- MOS Category % Chart ---
-st.write("### Job Type Breakdown by MOS Categories (%)")
+# Drop rows where Percentage is NaN or inf, which can occur from division by zero,
+# although the apply function above should minimize this.
+df_mos_melt = df_mos_melt.replace([float('inf'), -float('inf')], pd.NA).dropna(subset=['Percentage'])
 
+
+# --- MOS Category % Chart ---
+st.write("Job Type Breakdown by MOS Categories (%)")
+
+# Modified Altair chart for grouped bars - removed 'band' from XOffset
 mos_chart = alt.Chart(df_mos_melt).mark_bar().encode(
     x=alt.X("Job Type:N", title="Job Type"),
-    y=alt.Y("Percentage:Q", title="Percentage of Total MOS"),
+    y=alt.Y("Percentage:Q", title="Percentage of Total MOS", axis=alt.Axis(format=".1f", tickCount=5)),
     color=alt.Color("Category:N", title="Category"),
+    # Use xOffset to create grouped bars
+    xOffset=alt.XOffset("Category:N"), 
     tooltip=["Job Type", "Category", alt.Tooltip("Percentage:Q", format=".2f")]
 ).properties(
-    title="MOS Category Share by Job Type",
+    title="MOS Category Share by Job Type (Grouped Bar Chart)",
     height=400
 )
 
-st.altair_chart(mos_chart, use_container_width=True)
+# Add text labels to the MOS chart bars
+mos_chart_text = mos_chart.mark_text(
+    align='center',
+    baseline='bottom',
+    dy=-5 # Position text slightly above the bar
+).encode(
+    text=alt.Text("Percentage:Q", format=".1f"), # Display percentage with one decimal place
+    color=alt.value("black"), # Text color
+    x=alt.X("Job Type:N"), # Ensure x and xOffset are consistent
+    xOffset=alt.XOffset("Category:N"),
+    y=alt.Y("Percentage:Q") # Position text on the y-axis
+)
+
+st.altair_chart(mos_chart + mos_chart_text, use_container_width=True)
 
 text_offset = 15
-st.write("### Profitability Breakdown")
+st.write("Profitability Breakdown")
 
+# Define the color scale with explicit domain and range, AND SORT ORDER
+# The sort order applies to how the legend is displayed and how categories are layered/grouped.
 color_scale = alt.Scale(
-    domain=['loss', 'underquoted', 'profitable'],
-    range=['red', 'orange', 'green']
+    domain=['profitable', 'under quoted', 'loss'], # Desired order: profitable, underquoted, loss
+    range=['green', 'orange', 'red'] # Corresponding colors for the desired order
 )
 
-# --- Altair charts ---
-threshold_chart = alt.Chart(df_filtered).mark_bar().encode(
-    x=alt.X('Job Type:N', title="Job Type"),
-    y=alt.Y('count():Q', title="Number of Jobs"),
-    color=alt.Color('Profitability:N', title="Profitability", scale=color_scale),
-    tooltip=['Job Type', 'Profitability', 'count()']
-).properties(title="Jobs by Profitability")
-threshold_chart_text = threshold_chart.mark_text(
-    align='center',
-    baseline='bottom',
-    dy=-5  # Moves the text a little above the bar
-).encode(
-    text=alt.Text('count()', format=',.0f'),  # Formats the number with commas
-    color=alt.value('black')
-)
-st.altair_chart(threshold_chart + threshold_chart_text, use_container_width=True)
+# Create columns for the profitability charts
+profitability_cols = st.columns(3)
+
+# --- Jobs by Profitability Chart ---
+with profitability_cols[0]:
+    threshold_chart = alt.Chart(df_filtered).mark_bar().encode(
+        x=alt.X('Job Type:N', title="Job Type"),
+        y=alt.Y('count():Q', title="Number of Jobs"),
+        color=alt.Color('Profitability:N', title="Profitability", scale=color_scale,
+                        sort=['loss', 'under quoted', 'profitable']), # Explicitly sort for consistent rendering
+        tooltip=['Job Type', 'Profitability', 'count()']
+    ).properties(title="Jobs by Profitability")
+    
+    # Text layer for counts
+    threshold_chart_text = threshold_chart.mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-5  # Moves the text a little above the bar
+    )
+    
+    st.altair_chart(threshold_chart + threshold_chart_text, use_container_width=True)
 
 # --- Sales Chart ---
-sales_chart = alt.Chart(df_filtered).mark_bar().encode(
-    x=alt.X('Job Type:N', title="Job Type"),
-    y=alt.Y('Total Sales:Q', title="Total Sales"),
-    color=alt.Color('Profitability:N',
-                    title="Profitability", 
-                    scale=color_scale),
-    tooltip=['Job Type', 'Profitability', 'sum(Total Sales)']
-).properties(title="Total Sales by Profitability")
-sales_chart_text = sales_chart.mark_text(
-    align='center',
-    baseline='bottom',
-    dy=-5
-).encode(
-    text=alt.Text('Total Sales:Q', aggregate='sum', format=',.0f'),
-    color=alt.value('black')
-)
-
-st.altair_chart(sales_chart + sales_chart_text, use_container_width=True)
+with profitability_cols[1]:
+    sales_chart = alt.Chart(df_filtered).mark_bar().encode(
+        x=alt.X('Job Type:N', title="Job Type"),
+        y=alt.Y('Total Sales:Q', title="Total Sales"),
+        color=alt.Color('Profitability:N',
+                        title="Profitability", 
+                        scale=color_scale,
+                        sort=['profitable', 'under quoted', 'loss']), # Explicitly sort for consistent rendering
+        tooltip=['Job Type', 'Profitability', 'sum(Total Sales)']
+    ).properties(title="Total Sales by Profitability")
+    
+    # Text layer for total sales
+    sales_chart_text = sales_chart.mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-5
+    )
+    st.altair_chart(sales_chart + sales_chart_text, use_container_width=True)
 
 
 # --- Shortage Chart ---
-shortage_chart = alt.Chart(df_filtered).mark_bar().encode(
-    x=alt.X('Job Type:N', title="Job Type"),
-    y=alt.Y('Shortage:Q', title="Shortage"),
-    color=alt.Color('Profitability:N',
-                    title="Profitability",
-                    scale=color_scale),
-    tooltip=['Job Type', 'Profitability', 'sum(Shortage)']
-).properties(title="Total Shortage by Profitability")
-shortage_chart_text = shortage_chart.mark_text(
-    align='center',
-    baseline='bottom',
-    dy=-5
-).encode(
-    text=alt.Text('Shortage:Q', aggregate='sum', format=',.0f'),
-    color=alt.value('black')
-)
-
-st.altair_chart(shortage_chart + shortage_chart_text, use_container_width=True)
+with profitability_cols[2]:
+    shortage_chart = alt.Chart(df_filtered).mark_bar().encode(
+        x=alt.X('Job Type:N', title="Job Type"),
+        y=alt.Y('Shortage:Q', title="Shortage"),
+        color=alt.Color('Profitability:N',
+                        title="Profitability",
+                        scale=color_scale,
+                        sort=['profitable', 'underquoted', 'loss']), # Explicitly sort for consistent rendering
+        tooltip=['Job Type', 'Profitability', 'sum(Shortage)']
+    ).properties(title="Total Shortage by Profitability")
+    
+    # Text layer for shortage
+    shortage_chart_text = shortage_chart.mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-5
+    )
+    st.altair_chart(shortage_chart + shortage_chart_text, use_container_width=True)
 
 # Display the filtered DataFrame
 st.write(f"📅 Showing data for {selected_month_year.strftime('%B %Y')}")
 st.dataframe(df_filtered)
-
 
