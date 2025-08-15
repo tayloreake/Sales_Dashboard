@@ -213,7 +213,7 @@ gross_profit = closed_jobs["Gross Profit"].sum()
 vat = closed_jobs["VAT"].sum()
 gross_sales = closed_jobs["Gross Sales"].sum()
 fcl_expense = closed_jobs["FCL Expense"].sum()
-#avg_profit_pct = df_filtered["% GROSS PROFIT"].mean()
+avg_profit_pct = closed_jobs["% GROSS PROFIT"].mean()
 
 # KPIs - will wrap to multiple rows if screen size is small
 kpi_values = [
@@ -264,8 +264,9 @@ sales_by_type = df_filtered.groupby("Job Type")["Total Sales"].sum().reset_index
 # --- 2. Number of Completed Jobs by Job Type ---
 gross_sales_by_type = df_filtered.groupby("Job Type")["Gross Sales"].sum().reset_index()
 
-# --- 3. Pie Chart of Total Sales by Job Type ---
-pie_data = gross_sales_by_type[gross_sales_by_type["Gross Sales"] > 0]
+# Prepare data for the new "Jobs by Job Type" chart
+jobs_by_type_count = df_filtered["Job Type"].value_counts().reset_index()
+jobs_by_type_count.columns = ['Job Type', 'Number of Jobs']
 
 orange_color = [
     "#FFA500"]
@@ -279,7 +280,7 @@ orange_brown_palette = [
     "#A0522D",  # Sienna
 ]
 
-# List of Plotly charts
+# List of Plotly charts (updated to include the new bar chart)
 charts_plotly = [
     ("Total Sales by Job Type", 
      px.bar(sales_by_type, x="Job Type", y="Total Sales", text_auto=True, color_discrete_sequence=orange_color)),
@@ -287,12 +288,9 @@ charts_plotly = [
     ("Completed Jobs by Job Type", 
      px.bar(gross_sales_by_type, x="Job Type", y="Gross Sales", text_auto=True, color_discrete_sequence=orange_color)),
     
-    ("Job Type Share by Sales", 
-     px.pie(pie_data,
-            names="Job Type",
-            values="Gross Sales",
-            hole=0.3,
-            color_discrete_sequence=orange_brown_palette))
+    # NEW CHART: Jobs by Job Type (Bar Chart)
+    ("Number of Jobs by Job Type",
+     px.bar(jobs_by_type_count, x="Job Type", y="Number of Jobs", text_auto=True, color_discrete_sequence=orange_color))
 ]
 
 
@@ -342,7 +340,7 @@ df_mos_melt = df_mos_melt.replace([float('inf'), -float('inf')], pd.NA).dropna(s
 
 
 # --- MOS Category % Chart ---
-st.write("Job Type Breakdown by MOS Categories (%)")
+st.write("### Job Type Breakdown by MOS Categories (%)")
 
 # Modified Altair chart for grouped bars - removed 'band' from XOffset
 mos_chart = alt.Chart(df_mos_melt).mark_bar().encode(
@@ -373,10 +371,15 @@ mos_chart_text = mos_chart.mark_text(
 st.altair_chart(mos_chart + mos_chart_text, use_container_width=True)
 
 text_offset = 15
-st.write("Profitability Breakdown")
+st.write("### Profitability Breakdown")
+df_filtered["Profitability"] = df_filtered["Profitability"].str.strip().str.lower()
 
-# Define the color scale with explicit domain and range, AND SORT ORDER
-# The sort order applies to how the legend is displayed and how categories are layered/grouped.
+# Define the order mapping for profitability
+profitability_order_map = {'profitable': 0, 'under quoted': 1, 'loss': 2}
+# Apply this order to create a new numerical column for sorting
+df_filtered['profitability_order'] = df_filtered['Profitability'].map(profitability_order_map)
+
+# Define the color scale with explicit domain and range
 color_scale = alt.Scale(
     domain=['profitable', 'under quoted', 'loss'], # Desired order: profitable, underquoted, loss
     range=['green', 'orange', 'red'] # Corresponding colors for the desired order
@@ -387,65 +390,82 @@ profitability_cols = st.columns(3)
 
 # --- Jobs by Profitability Chart ---
 with profitability_cols[0]:
-    threshold_chart = alt.Chart(df_filtered).mark_bar().encode(
+    # Base chart for bars (STACKED)
+    threshold_chart_bars = alt.Chart(df_filtered).mark_bar().encode(
         x=alt.X('Job Type:N', title="Job Type"),
         y=alt.Y('count():Q', title="Number of Jobs"),
-        color=alt.Color('Profitability:N', title="Profitability", scale=color_scale,
-                        sort=['loss', 'under quoted', 'profitable']), # Explicitly sort for consistent rendering
+        color=alt.Color('Profitability:N', title="Profitability", scale=color_scale), 
+        order=alt.Order('profitability_order:Q', sort='ascending'), # Use the new numerical order column
         tooltip=['Job Type', 'Profitability', 'count()']
     ).properties(title="Jobs by Profitability")
     
     # Text layer for counts
-    threshold_chart_text = threshold_chart.mark_text(
+    threshold_chart_text = threshold_chart_bars.mark_text(
         align='center',
-        baseline='bottom',
-        dy=-5  # Moves the text a little above the bar
+        # Changed baseline to 'middle' and removed dy for stacked bar positioning
+    ).encode(
+        text=alt.Text('count()', format=',.0f'),  # Formats the number with commas
+        color=alt.value('black'),
+        x=alt.X('Job Type:N'),
+        y=alt.Y('count():Q', stack=True), # Apply stack=True for y-encoding of text
+        order=alt.Order('profitability_order:Q', sort='ascending') # Use the new numerical order column
     )
     
-    st.altair_chart(threshold_chart + threshold_chart_text, use_container_width=True)
+    st.altair_chart(threshold_chart_bars + threshold_chart_text, use_container_width=True)
 
 # --- Sales Chart ---
 with profitability_cols[1]:
-    sales_chart = alt.Chart(df_filtered).mark_bar().encode(
+    # Base chart for bars (STACKED)
+    sales_chart_bars = alt.Chart(df_filtered).mark_bar().encode(
         x=alt.X('Job Type:N', title="Job Type"),
         y=alt.Y('Total Sales:Q', title="Total Sales"),
         color=alt.Color('Profitability:N',
                         title="Profitability", 
-                        scale=color_scale,
-                        sort=['profitable', 'under quoted', 'loss']), # Explicitly sort for consistent rendering
+                        scale=color_scale), # Color encoding handles sort
+        order=alt.Order('profitability_order:Q', sort='ascending'), # Use the new numerical order column
         tooltip=['Job Type', 'Profitability', 'sum(Total Sales)']
     ).properties(title="Total Sales by Profitability")
     
     # Text layer for total sales
-    sales_chart_text = sales_chart.mark_text(
+    sales_chart_text = sales_chart_bars.mark_text(
         align='center',
-        baseline='bottom',
-        dy=-5
+        # Changed baseline to 'middle' and removed dy for stacked bar positioning
+    ).encode(
+        text=alt.Text('Total Sales:Q', aggregate='sum', format=',.0f'),
+        color=alt.value('black'),
+        x=alt.X('Job Type:N'),
+        y=alt.Y('Total Sales:Q', aggregate='sum', stack=True), # Apply stack=True for y-encoding of text
+        order=alt.Order('profitability_order:Q', sort='ascending') # Use the new numerical order column
     )
-    st.altair_chart(sales_chart + sales_chart_text, use_container_width=True)
+    st.altair_chart(sales_chart_bars + sales_chart_text, use_container_width=True)
 
 
 # --- Shortage Chart ---
 with profitability_cols[2]:
-    shortage_chart = alt.Chart(df_filtered).mark_bar().encode(
+    # Base chart for bars (STACKED)
+    shortage_chart_bars = alt.Chart(df_filtered).mark_bar().encode(
         x=alt.X('Job Type:N', title="Job Type"),
         y=alt.Y('Shortage:Q', title="Shortage"),
         color=alt.Color('Profitability:N',
                         title="Profitability",
-                        scale=color_scale,
-                        sort=['profitable', 'underquoted', 'loss']), # Explicitly sort for consistent rendering
+                        scale=color_scale), # Color encoding handles sort
+        order=alt.Order('profitability_order:Q', sort='ascending'), # Use the new numerical order column
         tooltip=['Job Type', 'Profitability', 'sum(Shortage)']
     ).properties(title="Total Shortage by Profitability")
     
     # Text layer for shortage
-    shortage_chart_text = shortage_chart.mark_text(
+    shortage_chart_text = shortage_chart_bars.mark_text(
         align='center',
-        baseline='bottom',
-        dy=-5
+        # Changed baseline to 'middle' and removed dy for stacked bar positioning
+    ).encode(
+        text=alt.Text('Shortage:Q', aggregate='sum', format=',.0f'),
+        color=alt.value('black'),
+        x=alt.X('Job Type:N'),
+        y=alt.Y('Shortage:Q', aggregate='sum', stack=True), # Apply stack=True for y-encoding of text
+        order=alt.Order('profitability_order:Q', sort='ascending') # Use the new numerical order column
     )
-    st.altair_chart(shortage_chart + shortage_chart_text, use_container_width=True)
+    st.altair_chart(shortage_chart_bars + shortage_chart_text, use_container_width=True)
 
 # Display the filtered DataFrame
 st.write(f"📅 Showing data for {selected_month_year.strftime('%B %Y')}")
 st.dataframe(df_filtered)
-
